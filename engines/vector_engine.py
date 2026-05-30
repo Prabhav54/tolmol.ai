@@ -16,11 +16,9 @@ class VectorEngine:
         """
         Generates vector embeddings locally and matches them with stored chunks using Cosine Distance (<=>).
         """
-        # Convert text into numerical vector array
         raw_embeddings = self.embedder.encode(query).tolist()
         embedding_vector_str = f"[{','.join(map(str, raw_embeddings))}]"
         
-        # Base SQL setup utilizing pgvector operator
         query_text = """
             SELECT product_id, chunk_text, 1 - (embedding <=> :query_embed) AS similarity
             FROM product_reviews
@@ -29,7 +27,6 @@ class VectorEngine:
         
         params = {"query_embed": embedding_vector_str, "top_k": top_k}
         
-        # Scrape-specific scope constraint optimization if product_id is passed
         if product_id is not None:
             query_text += " AND product_id = :product_id"
             params["product_id"] = product_id
@@ -48,3 +45,44 @@ class VectorEngine:
                 
         logger.info(f"Vector similarity search completed. Retrieved {len(results)} chunks.")
         return results
+
+    # 🚀 --- ADD THIS NEW METHOD ---
+    def ingest_product(self, product_id: int, source_url: str, chunks: list[str]) -> int:
+        """
+        Encodes list of raw text chunks into dense vectors and inserts them into PostgreSQL via pgvector.
+        """
+        if not chunks:
+            logger.warning(f"No chunks provided for product ingestion (ID: {product_id}).")
+            return 0
+
+        logger.info(f"Encoding {len(chunks)} text chunks for Product ID: {product_id}...")
+        
+        # 1. Batch encode all text chunks simultaneously to optimize performance
+        embeddings = self.embedder.encode(chunks).tolist()
+        
+        # 2. Build bulk insertion parameters with an explicit type cast to vector
+        insert_query = """
+            INSERT INTO product_reviews (product_id, chunk_text, embedding)
+            VALUES (:product_id, :chunk_text, CAST(:embedding AS vector));
+        """
+        
+        inserted_count = 0
+        
+        # 3. Secure connection to execute bulk transaction blocks safely
+        with self.engine.begin() as conn:
+            for text_chunk, vector in zip(chunks, embeddings):
+                # Format python list into a string literal array string '[x, y, z...]'
+                vector_str = f"[{','.join(map(str, vector))}]"
+                
+                conn.execute(
+                    text(insert_query),
+                    {
+                        "product_id": product_id,
+                        "chunk_text": text_chunk,
+                        "embedding": vector_str
+                    }
+                )
+                inserted_count += 1
+                
+        logger.info(f"Successfully vectorized and stored {inserted_count} chunks in database.")
+        return inserted_count

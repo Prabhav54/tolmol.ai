@@ -1,65 +1,47 @@
+import traceback
 from fastapi import APIRouter, HTTPException
-from api.schemas import IngestRequest, IngestResponse
+from pydantic import BaseModel
 from scraper.parser import LinkParser
-from scraper.text_processor import TextProcessor
 from engines.vector_engine import VectorEngine
-from db.session import db
-from sqlalchemy import text
 from core.logger import get_logger
 
 logger = get_logger(__name__)
-router = APIRouter(prefix="/ingest", tags=["Ingestion"])
+router = APIRouter()
 
-# Initialize required components
-parser = LinkParser()
-processor = TextProcessor()
-vector_layer = VectorEngine()
+class IngestionPayload(BaseModel):
+    url: str
+    product_id: int
 
-@router.post("", response_model=IngestResponse)
-async def ingest_product_link(payload: IngestRequest):
+# Note: Removed 'async' to let FastAPI handle it securely in a standard thread
+@router.post("/ingest")
+def ingest_product(payload: IngestionPayload):
+    logger.info(f"Starting cloud ingestion for Product ID: {payload.product_id}")
+    
     try:
-        # 1. Scrape the live link
-        scraped_data = parser.fetch_product_data(payload.url)
+        parser = LinkParser()
+        parsed_data = parser.parse(payload.url)
         
-        # 2. Segment text into overlapping chunks
-        chunks = processor.chunk_text(scraped_data["raw_content"])
-        
-        if not chunks:
-            raise HTTPException(status_code=400, detail="No extractable text content found at the provided URL.")
+        if not parsed_data or not parsed_data.get("chunks"):
+            raise HTTPException(status_code=400, detail="No readable text could be extracted.")
             
-        # 3. Clean out old entries for this specific product ID to avoid duplications
-        with db.engine.begin() as conn:
-            conn.execute(
-                text("DELETE FROM product_reviews WHERE product_id = :prod_id;"),
-                {"prod_id": payload.product_id}
-            )
-            
-            # 4. Generate embeddings locally and save directly to Postgres
-            for chunk in chunks:
-                raw_embeds = vector_layer.embedder.encode(chunk).tolist()
-                embedding_str = f"[{','.join(map(str, raw_embeds))}]"
-                
-                conn.execute(
-                    text("""
-                        INSERT INTO product_reviews (product_id, source_url, chunk_text, embedding)
-                        VALUES (:prod_id, :url, :txt, :embed);
-                    """),
-                    {
-                        "prod_id": payload.product_id,
-                        "url": str(payload.url),
-                        "txt": chunk,
-                        "embed": embedding_str
-                    }
-                )
-                
-        logger.info(f"Successfully processed and stored product context for ID {payload.product_id}")
-        return IngestResponse(
-            status="Success",
-            message="Product context fully analyzed and stored.",
-            chunks_inserted=len(chunks),
-            product_title=scraped_data["title"]
+        vector_engine = VectorEngine()
+        chunks_inserted = vector_engine.ingest_product(
+            product_id=payload.product_id,
+            source_url=payload.url,
+            chunks=parsed_data["chunks"]
         )
         
+        return {
+            "status": "Success",
+            "message": "Product context fully analyzed and stored.",
+            "chunks_inserted": chunks_inserted,
+            "product_title": parsed_data.get("title", "Unknown Product")
+        }
+        
     except Exception as e:
-        logger.error(f"Ingestion route failed processing: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+        error_stack = traceback.format_exc()
+        logger.error(f"Ingestion pipeline crashed!\n{error_stack}")
+        raise HTTPException(
+            status_code=500, 
+            detail=f"Pipeline Crash Details:\n{str(e)}"
+        )
