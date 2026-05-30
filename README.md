@@ -53,44 +53,7 @@ hybrid-rag-ecommerce/
 ├── run.py                      # Explicit Windows-safe startup script for Uvicorn
 ├── setup.py                    # Package configuration for local module imports
 └── test_run.py                 # Sandbox environment for testing individual functions
-🛠️ Tech Stack
-Data Science & ML: sentence-transformers, numpy
 
-Backend Framework: FastAPI, uvicorn, pydantic
-
-Frontend UI: Streamlit, requests
-
-Database: PostgreSQL, pgvector, SQLAlchemy
-
-Extraction: Jina Reader API (Cloud JS Rendering)
-
-⚙️ Local Setup & Installation
-1. Database Initialization
-Ensure Docker is running, then spin up the database container:
-
-Bash
-docker-compose up -d
-2. Environment Setup
-Install the required dependencies:
-
-Bash
-pip install -r requirements.txt
-3. Launching the Services
-You will need two terminal windows to run the split architecture.
-
-Terminal 1: Start the FastAPI Backend
-
-Bash
-set PYTHONPATH=. && python run.py
-The backend will automatically verify your database schema and load the Hugging Face embedding models into memory.
-
-Terminal 2: Start the Streamlit Frontend
-
-Bash
-streamlit run app/main.py
-Author: Prabhav Khare
-
-Specializing in Data Science, Analytics, and applied Machine Learning architectures.
 │
 ├── requirements.txt            # Python dependencies
 └── README.md                   # Project documentation
