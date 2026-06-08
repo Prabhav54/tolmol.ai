@@ -2,10 +2,11 @@ import sys
 import asyncio
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from api.routes import ingest, query  # Adjust imports based on your exact file names
+
+# Import both of your route files
+from api.routes import ingest, query 
 
 # --- CRITICAL WINDOWS ASYNCIO PATCH ---
-# This forces Windows to use ProactorEventLoop, which supports Playwright subprocesses
 if sys.platform == 'win32':
     asyncio.set_event_loop_policy(asyncio.WindowsProactorEventLoopPolicy())
 # --------------------------------------
@@ -15,7 +16,7 @@ app = FastAPI(
     version="1.0.0"
 )
 
-# Enable CORS so your Streamlit frontend can communicate with the backend
+# Enable CORS so Streamlit can communicate with FastAPI
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
@@ -24,9 +25,9 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# Include your application routes
+# --- REGISTER YOUR ROUTES HERE ---
 app.include_router(ingest.router)
-# app.include_router(query.router) # Uncomment when your query engine route is ready
+app.include_router(query.router)  # <--- This is the line that fixes the 404 error!
 
 @app.get("/")
 def read_root():

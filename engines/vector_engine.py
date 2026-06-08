@@ -3,6 +3,9 @@ from sqlalchemy import text
 from db.session import db
 from core.config import settings
 from core.logger import get_logger
+import random
+from datetime import datetime, timedelta
+import pandas as pd
 
 logger = get_logger(__name__)
 
@@ -86,3 +89,27 @@ class VectorEngine:
                 
         logger.info(f"Successfully vectorized and stored {inserted_count} chunks in database.")
         return inserted_count
+
+    def get_simulated_price_trend(self, product_id: int, base_price: int = 2500) -> list:
+        """
+        Generates a simulated 30-day price trend for the UI dashboard.
+        In a production environment, this would pull from a real SQL price_history table.
+        """
+        trend_data = []
+        current_date = datetime.now()
+        
+        # Simulate 30 days of price fluctuations
+        current_price = base_price
+        for i in range(30):
+            date_string = (current_date - timedelta(days=30-i)).strftime("%Y-%m-%d")
+            
+            # Randomly fluctuate the price by 1-5% up or down
+            change_percent = random.uniform(-0.05, 0.05)
+            current_price = int(current_price * (1 + change_percent))
+            
+            trend_data.append({
+                "date": date_string,
+                "price": current_price
+            })
+            
+        return trend_data

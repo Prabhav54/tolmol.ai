@@ -16,3 +16,10 @@ CREATE TABLE IF NOT EXISTS product_reviews (
 -- Indexing for speed optimization on large datasets (Optional but recommended)
 CREATE INDEX IF NOT EXISTS hf_vector_cosine_idx ON product_reviews 
 USING hnsw (embedding vector_cosine_ops);
+
+CREATE TABLE IF NOT EXISTS price_history (
+    id SERIAL PRIMARY KEY,
+    product_id INTEGER NOT NULL,
+    price NUMERIC NOT NULL,
+    timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
