@@ -56,7 +56,7 @@ st.markdown("""
     </style>
 """, unsafe_allow_html=True)
 
-BACKEND_URL = "http://127.0.0.1:8000"
+BACKEND_URL = "https://your-actual-render-link.onrender.com"
 
 # 3. Session State Management
 if "chat_history" not in st.session_state:
