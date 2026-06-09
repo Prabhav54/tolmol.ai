@@ -56,7 +56,7 @@ st.markdown("""
     </style>
 """, unsafe_allow_html=True)
 
-BACKEND_URL = "https://your-actual-render-link.onrender.com"
+BACKEND_URL = "https://tolmol-rag-backend.onrender.com"
 
 # 3. Session State Management
 if "chat_history" not in st.session_state:
