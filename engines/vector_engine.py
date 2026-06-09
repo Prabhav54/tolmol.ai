@@ -1,4 +1,3 @@
-from sentence_transformers import SentenceTransformer
 from sqlalchemy import text
 from db.session import db
 from core.config import settings
@@ -6,20 +5,36 @@ from core.logger import get_logger
 import random
 from datetime import datetime, timedelta
 import pandas as pd
+import google.generativeai as genai
+import os
 
 logger = get_logger(__name__)
 
 class VectorEngine:
     def __init__(self):
-        logger.info("Loading Local Sentence-Transformers Embedding Layer...")
-        self.embedder = SentenceTransformer(settings.LOCAL_EMBEDDING_MODEL)
+        logger.info("Initializing Lightweight Gemini Embedding Engine...")
+        
+        # Configure Gemini API using environment variable
+        api_key = os.environ.get("GEMINI_API_KEY")
+        if not api_key:
+            logger.error("GEMINI_API_KEY environment variable is missing!")
+        genai.configure(api_key=api_key)
+        
         self.engine = db.engine
 
     def similarity_search(self, query: str, product_id: int = None, top_k: int = 3) -> list:
         """
-        Generates vector embeddings locally and matches them with stored chunks using Cosine Distance (<=>).
+        Generates vector embeddings via Gemini API and matches them with stored chunks using Cosine Distance (<=>).
         """
-        raw_embeddings = self.embedder.encode(query).tolist()
+        # 1. Generate embedding via Gemini API
+        response = genai.embed_content(
+            model="models/text-embedding-004",
+            content=query,
+            task_type="retrieval_query",
+            output_dimensionality=384  # Magic parameter to match your existing PostgreSQL schema!
+        )
+        raw_embeddings = response['embedding']
+        
         embedding_vector_str = f"[{','.join(map(str, raw_embeddings))}]"
         
         query_text = """
@@ -49,21 +64,26 @@ class VectorEngine:
         logger.info(f"Vector similarity search completed. Retrieved {len(results)} chunks.")
         return results
 
-    # 🚀 --- ADD THIS NEW METHOD ---
     def ingest_product(self, product_id: int, source_url: str, chunks: list[str]) -> int:
         """
-        Encodes list of raw text chunks into dense vectors and inserts them into PostgreSQL via pgvector.
+        Encodes list of raw text chunks via Gemini API and inserts them into PostgreSQL via pgvector.
         """
         if not chunks:
             logger.warning(f"No chunks provided for product ingestion (ID: {product_id}).")
             return 0
 
-        logger.info(f"Encoding {len(chunks)} text chunks for Product ID: {product_id}...")
+        logger.info(f"Encoding {len(chunks)} text chunks for Product ID: {product_id} via Gemini...")
         
-        # 1. Batch encode all text chunks simultaneously to optimize performance
-        embeddings = self.embedder.encode(chunks).tolist()
+        # 1. Batch encode all text chunks simultaneously via API
+        response = genai.embed_content(
+            model="models/text-embedding-004",
+            content=chunks,
+            task_type="retrieval_document",
+            output_dimensionality=384  # Keeps compatibility with your existing database
+        )
+        embeddings = response['embedding']
         
-        # 2. Build bulk insertion parameters with an explicit type cast to vector
+        # 2. Build bulk insertion parameters
         insert_query = """
             INSERT INTO product_reviews (product_id, chunk_text, embedding)
             VALUES (:product_id, :chunk_text, CAST(:embedding AS vector));
@@ -74,7 +94,6 @@ class VectorEngine:
         # 3. Secure connection to execute bulk transaction blocks safely
         with self.engine.begin() as conn:
             for text_chunk, vector in zip(chunks, embeddings):
-                # Format python list into a string literal array string '[x, y, z...]'
                 vector_str = f"[{','.join(map(str, vector))}]"
                 
                 conn.execute(
@@ -93,17 +112,14 @@ class VectorEngine:
     def get_simulated_price_trend(self, product_id: int, base_price: int = 2500) -> list:
         """
         Generates a simulated 30-day price trend for the UI dashboard.
-        In a production environment, this would pull from a real SQL price_history table.
         """
         trend_data = []
         current_date = datetime.now()
         
-        # Simulate 30 days of price fluctuations
         current_price = base_price
         for i in range(30):
             date_string = (current_date - timedelta(days=30-i)).strftime("%Y-%m-%d")
             
-            # Randomly fluctuate the price by 1-5% up or down
             change_percent = random.uniform(-0.05, 0.05)
             current_price = int(current_price * (1 + change_percent))
             
