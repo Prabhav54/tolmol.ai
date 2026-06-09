@@ -204,32 +204,27 @@ with col_side:
                     color_continuous_scale='Blues_r', text_auto='.0f'
                 )
                 fig_bar.update_layout(
-                    font=dict(color="#475569"), # Forces text to be dark gray
+                    font=dict(color="#0f172a"), 
                     margin=dict(l=0, r=0, t=10, b=0),
                     paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)",
                     coloraxis_showscale=False,
-                    xaxis=dict(title="Price (₹)", showgrid=True, gridcolor="#e2e8f0"),
-                    yaxis={'categoryorder':'total descending', 'title': ''}
+                    xaxis=dict(title="Price (₹)", showgrid=True, gridcolor="#e2e8f0", tickfont=dict(color="#0f172a", size=13)),
+                    yaxis={'categoryorder':'total descending', 'title': '', 'tickfont': dict(color="#0f172a", size=14, weight="bold")}
                 )
                 st.plotly_chart(fig_bar, use_container_width=True, config={'displayModeBar': False})
+                # 2. BEAUTIFUL Custom HTML Table
+                table_html = (
+                    "<table style='width:100%; border-collapse: collapse; background: white; border-radius: 8px; overflow: hidden; box-shadow: 0 4px 6px rgba(0,0,0,0.05); font-size: 14px;'>"
+                    "<tr style='background-color: #f8fafc; border-bottom: 2px solid #e2e8f0;'>"
+                    "<th style='padding: 12px; text-align: left; color: #475569;'>Platform</th>"
+                    "<th style='padding: 12px; text-align: right; color: #475569;'>Price</th>"
+                    "<th style='padding: 12px; text-align: right; color: #475569;'>Delivery</th>"
+                    "</tr>"
+                )
                 
-                # 2. BEAUTIFUL Custom HTML Table (Replaces the dark st.dataframe)
-                table_html = """
-                <table style='width:100%; border-collapse: collapse; background: white; border-radius: 8px; overflow: hidden; box-shadow: 0 4px 6px rgba(0,0,0,0.05); font-size: 14px;'>
-                    <tr style='background-color: #f8fafc; border-bottom: 2px solid #e2e8f0;'>
-                        <th style='padding: 12px; text-align: left; color: #475569;'>Platform</th>
-                        <th style='padding: 12px; text-align: right; color: #475569;'>Price</th>
-                        <th style='padding: 12px; text-align: right; color: #475569;'>Delivery</th>
-                    </tr>
-                """
                 for _, row in df_comp.iterrows():
-                    table_html += f"""
-                    <tr style='border-bottom: 1px solid #f1f5f9;'>
-                        <td style='padding: 12px; font-weight: 600; color: #0f172a;'>{row['Platform']}</td>
-                        <td style='padding: 12px; text-align: right; color: #2563eb; font-weight: 700;'>₹{row['Price']:,}</td>
-                        <td style='padding: 12px; text-align: right; color: #64748b;'>{row['Delivery']}</td>
-                    </tr>
-                    """
+                    table_html += f"<tr style='border-bottom: 1px solid #f1f5f9;'><td style='padding: 12px; font-weight: 600; color: #0f172a;'>{row['Platform']}</td><td style='padding: 12px; text-align: right; color: #2563eb; font-weight: 700;'>₹{row['Price']:,}</td><td style='padding: 12px; text-align: right; color: #64748b;'>{row['Delivery']}</td></tr>"
+                
                 table_html += "</table>"
                 st.markdown(table_html, unsafe_allow_html=True)
                 

@@ -68,36 +68,41 @@ async def compare_platform_prices(product_id: int, current_title: str = "Product
     try:
         clean_title = current_title.replace("Title:", "").strip().lower()
         
-        # 1. Base Price Detection (Mocked for safety, would be pulled from vector DB in production)
+        # 1. Base Price Detection
         base = 2500
         if "macbook" in clean_title or "laptop" in clean_title: base = 75000
         elif "asus" in clean_title or "display" in clean_title: base = 22000
-        elif "nike" in clean_title or "shoe" in clean_title: base = 4500
-        elif "shirt" in clean_title or "wear" in clean_title: base = 1200
-        elif "serum" in clean_title or "cream" in clean_title: base = 800
+        elif any(word in clean_title for word in ["nike", "asics", "skechers", "shoe"]): base = 4500
+        elif any(word in clean_title for word in ["shirt", "snitch", "wear"]): base = 1200
 
         # 2. Dynamic Category Classification & Platform Selection
         platforms = []
-        if any(word in clean_title for word in ["shoe", "shirt", "wear", "sneaker", "apparel", "nike"]):
+        
+        # Expanded vocabulary for robust footwear & streetwear detection
+        fashion_keywords = [
+            "shoe", "shoes", "sneaker", "sneakers", "shirt", "apparel", 
+            "myntra", "ajio", "snitch", "asics", "skechers", "nike"
+        ]
+        beauty_keywords = ["serum", "cream", "beauty", "makeup", "lotion", "nykaa", "purplle"]
+        
+        if any(word in clean_title for word in fashion_keywords):
             category = "Fashion & Apparel"
-            platforms = ["Myntra", "Ajio", "Tata Cliq", "Amazon.in", "Flipkart"]
-        elif any(word in clean_title for word in ["serum", "cream", "beauty", "makeup", "lotion"]):
+            platforms = ["Myntra", "AJIO", "Tata Cliq", "Amazon.in", "Nykaa Fashion"]
+        elif any(word in clean_title for word in beauty_keywords):
             category = "Beauty & Personal Care"
             platforms = ["Nykaa", "Purplle", "Amazon.in", "Flipkart"]
         else:
             category = "Electronics & General"
             platforms = ["Amazon.in", "Flipkart", "Croma", "Reliance Digital", "Vijay Sales"]
 
-        # 3. Generate Simulated Pricing Matrix based on Category
+        # 3. Generate Simulated Pricing Matrix
         comparison_matrix = []
         for index, platform in enumerate(platforms):
-            # Simulate realistic market fluctuations (between -5% and +8% of base price)
             variance = random.uniform(-0.05, 0.08)
             price = int(base * (1 + variance))
-            
-            # Simulate delivery times based on typical Indian logistics
             delivery = random.choice(["Same Day", "Tomorrow", "2 Days", "3-5 Days"])
-            if index == 0:  # Force the first platform to be slightly cheaper for demonstration
+            
+            if index == 0:  
                 price = int(base * 0.95)
                 delivery = "Tomorrow"
 
@@ -108,7 +113,6 @@ async def compare_platform_prices(product_id: int, current_title: str = "Product
                 "Category": category
             })
         
-        # 4. Sort by absolute lowest price
         sorted_matrix = sorted(comparison_matrix, key=lambda x: x["Price"])
         
         return {
