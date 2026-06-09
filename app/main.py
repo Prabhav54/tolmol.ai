@@ -56,7 +56,7 @@ st.markdown("""
     </style>
 """, unsafe_allow_html=True)
 
-BACKEND_URL = "https://tolmol-backend.onrender.com"
+BACKEND_URL = "http://127.0.0.1:8000"
 
 # 3. Session State Management
 if "chat_history" not in st.session_state:
@@ -172,6 +172,60 @@ with col_side:
     if st.session_state["active_product_id"]:
         col_id, col_chunk = st.columns(2)
         with col_id:
+            st.markdown("<br>", unsafe_allow_html=True) # Add a little spacing
+        
+        # Create three clean tabs for the right panel
+        tab_price, tab_sentiment, tab_bench = st.tabs(["💰 Pricing", "😊 Sentiment", "📊 Benchmarks"])
+        
+        product_id = st.session_state["active_product_id"]
+        current_title = st.session_state.get("active_product_title", "Product")
+
+        # TAB 1: Pricing Matrix
+        with tab_price:
+            st.markdown("##### Competitor Pricing Matrix")
+            try:
+                price_res = requests.get(f"{BACKEND_URL}/query/compare/{product_id}?current_title={current_title}")
+                if price_res.status_code == 200:
+                    data = price_res.json()
+                    st.caption(f"Detected Category: {data.get('category', 'General')}")
+                    st.dataframe(data.get("comparisons", []), use_container_width=True, hide_index=True)
+                else:
+                    st.error("Failed to load pricing data.")
+            except Exception:
+                st.warning("Backend disconnected.")
+
+        # TAB 2: Competitor Sentiment
+        with tab_sentiment:
+            st.markdown("##### Market Sentiment")
+            try:
+                sent_res = requests.get(f"{BACKEND_URL}/query/sentiment/{product_id}")
+                if sent_res.status_code == 200:
+                    data = sent_res.json()
+                    metrics = data.get("metrics", {})
+                    
+                    # Display a clean bar chart for Positive/Neutral/Negative
+                    st.bar_chart(metrics)
+                    
+                    st.markdown("**Top Praises:**")
+                    for praise in data.get("top_praises", []):
+                        st.caption(f"✅ {praise}")
+                        
+                    st.markdown("**Top Complaints:**")
+                    for complaint in data.get("top_complaints", []):
+                        st.caption(f"⚠️ {complaint}")
+            except Exception:
+                st.warning("Backend disconnected.")
+
+        # TAB 3: Feature Benchmarks
+        with tab_bench:
+            st.markdown("##### Category Benchmarks")
+            try:
+                bench_res = requests.get(f"{BACKEND_URL}/query/benchmark/{product_id}")
+                if bench_res.status_code == 200:
+                    data = bench_res.json()
+                    st.dataframe(data.get("benchmarks", []), use_container_width=True, hide_index=True)
+            except Exception:
+                st.warning("Backend disconnected.")
             st.markdown(f"""
                 <div class="info-card">
                     <p style="color: #64748b; margin: 0; font-size: 11px; font-weight: 700; text-transform: uppercase;">Unique Target ID</p>
