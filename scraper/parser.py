@@ -1,63 +1,88 @@
-import re
-import requests
+import os
+import httpx
+from bs4 import BeautifulSoup
+from urllib.parse import urlparse
+import google.generativeai as genai
+import json
 from core.logger import get_logger
-from core.config import settings
 
 logger = get_logger(__name__)
 
 class LinkParser:
     def __init__(self):
-        self.max_chars = settings.MAX_SCRAPE_CHARS
-
-    def fetch_dynamic_content(self, url: str) -> str:
-        """Bypasses local Playwright completely by using Jina's cloud rendering engine."""
-        logger.info(f"Routing scrape through Jina Cloud API for: {url}")
-        
-        try:
-            # Prepending r.jina.ai tells their servers to render the JS and return clean text
-            jina_api_url = f"https://r.jina.ai/{url}"
-            
-            headers = {
-                "Accept": "text/plain",
-                "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"
-            }
-            
-            response = requests.get(jina_api_url, headers=headers, timeout=45)
-            response.raise_for_status()
-            
-            return response.text
-            
-        except Exception as e:
-            logger.error(f"Cloud scraping failed: {e}")
-            return ""
-
-    def clean_and_chunk(self, text: str, chunk_size: int = 1000, overlap: int = 200) -> list[str]:
-        if not text:
-            return []
-            
-        cleaned_text = re.sub(r'\n+', '\n', text)
-        cleaned_text = re.sub(r'\s+', ' ', cleaned_text).strip()
-        
-        if len(cleaned_text) > self.max_chars:
-            logger.warning(f"Text exceeded {self.max_chars} chars. Truncating.")
-            cleaned_text = cleaned_text[:self.max_chars]
-
-        chunks = []
-        for i in range(0, len(cleaned_text), chunk_size - overlap):
-            chunks.append(cleaned_text[i:i + chunk_size])
-            
-        return chunks
+        api_key = os.environ.get("GEMINI_API_KEY")
+        if api_key:
+            genai.configure(api_key=api_key)
+        self.model = genai.GenerativeModel("gemini-1.5-flash")
 
     def parse(self, url: str) -> dict:
-        raw_text = self.fetch_dynamic_content(url)
+        logger.info(f"Analyzing incoming URL domain format: {url}")
         
-        if not raw_text:
-            raise ValueError(f"Failed to extract text from {url}. Ensure the link is public.")
+        parsed_url = urlparse(url)
+        domain = parsed_url.netloc.lower()
+        
+        platform_name = "Generic Retailer"
+        if "amazon" in domain: platform_name = "Amazon"
+        elif "flipkart" in domain: platform_name = "Flipkart"
+        elif "myntra" in domain: platform_name = "Myntra"
+        elif "snitch" in domain: platform_name = "Snitch"
+        elif "ajio" in domain: platform_name = "AJIO"
+
+        try:
+            # 1. UPGRADED HEADERS to bypass basic bot protection
+            headers = {
+                "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+                "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8",
+                "Accept-Language": "en-US,en;q=0.5",
+                "Connection": "keep-alive",
+            }
             
-        chunks = self.clean_and_chunk(raw_text)
-        title = chunks[0][:50].replace('\n', ' ') + "..." if chunks else "Unknown Product"
-        
-        return {
-            "title": title,
-            "chunks": chunks
-        }
+            response = httpx.get(url, headers=headers, follow_redirects=True, timeout=15.0)
+            
+            if response.status_code != 200:
+                logger.error(f"Failed to access retail page. HTTP Status: {response.status_code}")
+                return None
+                
+            soup = BeautifulSoup(response.text, "html.parser")
+            
+            for script in soup(["script", "style", "header", "footer", "nav"]):
+                script.decompose()
+                
+            raw_text = " ".join(soup.get_text().split())[:6000] 
+            
+            # 2. LOG THE SCRAPED TEXT LENGTH so you can see if the site blocked you
+            logger.info(f"Successfully scraped {len(raw_text)} characters of text from {platform_name}.")
+
+            prompt = f"""
+            You are an expert e-commerce data extraction system. Analyze this raw text scraped from a retail product webpage.
+            Extract the product title, current price, and a list of distinct descriptive sentences or review insights.
+            
+            URL Context: {url}
+            Raw Scraped Content:
+            {raw_text}
+            
+            Return ONLY a valid JSON object matching exactly this format structure. Do NOT wrap it in markdown block quotes (```json):
+            {{
+                "title": "Clean Canonical Product Title String Here",
+                "price": 4999,
+                "chunks": ["Insight chunk 1", "Specification chunk 2", "Review summary point 3"]
+            }}
+            """
+            
+            llm_response = self.model.generate_content(
+                prompt, 
+                generation_config={"response_mime_type": "application/json"}
+            )
+            
+            # 3. CLEAN THE JSON response in case Gemini includes markdown wrapping
+            clean_json_text = llm_response.text.strip().replace("```json", "").replace("```", "")
+            extracted_data = json.loads(clean_json_text)
+            
+            extracted_data["platform"] = platform_name
+            extracted_data["url"] = url
+            
+            return extracted_data
+
+        except Exception as e:
+            logger.error(f"Error handling multi-platform scraping logic: {e}")
+            return None

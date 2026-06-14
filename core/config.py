@@ -7,6 +7,7 @@ class Settings(BaseSettings):
     
     # Try reading HF_TOKEN first, then fall back to HUGGINGFACE_API_TOKEN
     HUGGINGFACE_API_TOKEN: str = os.getenv("HF_TOKEN") or os.getenv("HUGGINGFACE_API_TOKEN", "")
+    GOOGLE_API_KEY: str = os.getenv("GOOGLE_API_KEY", "")
     
     # Local embedding model for the Vector Engine
     LOCAL_EMBEDDING_MODEL: str = os.getenv("LOCAL_EMBEDDING_MODEL", "all-MiniLM-L6-v2")

@@ -1,198 +1,150 @@
+import traceback
 from fastapi import APIRouter, HTTPException
-from pydantic import BaseModel, HttpUrl
-from engines.router import Router
-from engines.vector_engine import VectorEngine
+from pydantic import BaseModel
+from sqlalchemy import text
+from db.session import db
+from engines.vector_engine import vector_db
 from engines.sql_engine import SQLEngine
-from engines.synthesis import ResponseSynthesizer
 from core.logger import get_logger
+import google.generativeai as genai
 import random
-from datetime import datetime, timedelta
-from urllib.parse import urlparse
 
 logger = get_logger(__name__)
-router = APIRouter(prefix="/query", tags=["RAG Inference"])
+router = APIRouter(prefix="/query", tags=["Query"])
 
-# Explicitly defining the expected payload schema
-class QueryRequest(BaseModel):
+class QueryPayload(BaseModel):
     question: str
     product_id: int
 
-intent_router = Router()
-vector_engine = VectorEngine()
-sql_engine = SQLEngine()
-synthesizer = ResponseSynthesizer()
-
+# ---------------------------------------------------------
+# ENDPOINT: Hybrid RAG Intent Router (Chat Interface)
+# ---------------------------------------------------------
 @router.post("")
-async def execute_rag_query(payload: QueryRequest):
+def handle_user_query(payload: QueryPayload):
+    logger.info(f"Incoming query routing evaluation for Product ID: {payload.product_id}")
+    question_lower = payload.question.lower()
+    sql_engine = SQLEngine()
+    
     try:
-        # 1. Classify execution route
-        engine_route = intent_router.route_query(payload.question)
+        # 1. INTENT ROUTING
+        # Check if the user is asking quantitative (SQL) or qualitative (Vector) questions
+        sql_keywords = ["cheap", "price", "lowest", "cost", "trend", "chart", "history", "compare", "platform"]
+        is_sql_intent = any(keyword in question_lower for keyword in sql_keywords)
         
-        # 2. Execute SQL Strategy
-        if engine_route == "SQL":
-            execution_payload = sql_engine.generate_and_execute(payload.question)
-            data_summary = str(execution_payload["data"])
-            final_output = synthesizer.answer_question(payload.question, data_summary)
+        if is_sql_intent:
+            logger.info("Routing query to Structured SQL Analytics Engine...")
+            analytics_result = sql_engine.generate_and_execute(payload.question, payload.product_id)
+            
+            # Use Gemini to synthesize the raw SQL output into a human-friendly answer
+            model = genai.GenerativeModel("gemini-1.5-flash")
+            summary_prompt = f"""
+            Summarize these retail pricing results nicely for a consumer. 
+            User question: {payload.question}
+            Data Rows from Database: {analytics_result['data']}
+            """
+            ai_response = model.generate_content(summary_prompt).text
             
             return {
-                "engine_selected": "Structured SQL Engine",
-                "sql_executed": execution_payload.get("sql_executed", ""),
-                "response": final_output
+                "engine_selected": "SQL Analytics Engine",
+                "response": ai_response
             }
             
-        # 3. Execute Vector Strategy
         else:
-            matches = vector_engine.similarity_search(
+            logger.info("Routing query to Unstructured Semantic Vector Engine...")
+            # Retrieve vectors strictly mapped to this specific product ID
+            retrieved_chunks = vector_db.vector_store.similarity_search(
                 query=payload.question,
-                product_id=payload.product_id,
-                top_k=10
+                k=4,
+                filter={"product_id": payload.product_id}
             )
-            context_string = "\n---\n".join([m["text"] for m in matches])
-            final_output = synthesizer.answer_question(payload.question, context_string)
+            
+            context_text = "\n".join([doc.page_content for doc in retrieved_chunks])
+            
+            model = genai.GenerativeModel("gemini-1.5-flash")
+            rag_prompt = f"""
+            Answer the consumer's question using ONLY the verified product review excerpts provided.
+            If the answer isn't in the context, explicitly state that you don't have enough data.
+            
+            Question: {payload.question}
+            Context:
+            {context_text}
+            """
+            ai_response = model.generate_content(rag_prompt).text
             
             return {
                 "engine_selected": "Semantic Vector Engine",
-                "sql_executed": None,
-                "response": final_output
+                "response": ai_response
             }
             
     except Exception as e:
-        logger.error(f"Inference processing endpoint exception: {e}")
+        logger.error(f"Query routing failure: {traceback.format_exc()}")
         raise HTTPException(status_code=500, detail=str(e))
 
-
 # ---------------------------------------------------------
-# ENDPOINT: Fetch Cross-Platform Price Comparison (With URL Guard)
+# ENDPOINT: Database-Driven Price Comparison
 # ---------------------------------------------------------
 @router.get("/compare/{product_id}")
-async def compare_platform_prices(product_id: int, current_title: str = "Product", source_url: str = ""):
+def compare_platform_prices(product_id: int):
     try:
-        # Prevent non-e-commerce scraping workflows
-        if source_url:
-            parsed_url = urlparse(source_url)
-            domain = parsed_url.netloc.lower()
-            banned_domains = ["youtube.com", "youtu.be", "instagram.com", "facebook.com", "twitter.com"]
-            if any(banned in domain for banned in banned_domains):
-                raise HTTPException(status_code=400, detail="Invalid link. Please provide a valid retail platform URL.")
-
-        clean_title = current_title.replace("Title:", "").strip().lower()
-        
-        # Base Price Detection Matrix
-        base = 2500
-        if "macbook" in clean_title or "laptop" in clean_title: base = 75000
-        elif "asus" in clean_title or "display" in clean_title: base = 22000
-        elif any(w in clean_title for w in ["shoe", "shoes", "sneaker", "asics", "skechers", "nike"]): base = 4500
-        elif any(w in clean_title for w in ["shirt", "snitch", "wear", "apparel"]): base = 1200
-
-        fashion_keywords = ["shoe", "shoes", "sneaker", "sneakers", "shirt", "apparel", "myntra", "ajio", "snitch", "asics", "skechers", "nike"]
-        beauty_keywords = ["serum", "cream", "beauty", "makeup", "lotion", "nykaa", "purplle"]
-        
-        if any(word in clean_title for word in fashion_keywords):
-            category = "Fashion & Apparel"
-            platforms = ["Myntra", "AJIO", "Tata Cliq", "Amazon.in", "Nykaa Fashion"]
-        elif any(word in clean_title for word in beauty_keywords):
-            category = "Beauty & Personal Care"
-            platforms = ["Nykaa", "Purplle", "Amazon.in", "Flipkart"]
-        else:
-            category = "Electronics & General"
-            platforms = ["Amazon.in", "Flipkart", "Croma", "Reliance Digital", "Vijay Sales"]
-
-        comparison_matrix = []
-        for index, platform in enumerate(platforms):
-            variance = random.uniform(-0.05, 0.08)
-            price = int(base * (1 + variance))
-            delivery = random.choice(["Same Day", "Tomorrow", "2 Days", "3-5 Days"])
+        query = """
+            SELECT platform as "Platform", current_price as "Price", delivery_timeline as "Delivery"
+            FROM product_links 
+            WHERE product_id = :pid 
+            ORDER BY current_price ASC;
+        """
+        with db.engine.connect() as conn:
+            rows = conn.execute(text(query), {"pid": product_id}).fetchall()
+            data = [dict(row._mapping) for row in rows]
             
-            if index == 0:  
-                price = int(base * 0.95)
-                delivery = "Tomorrow"
-
-            comparison_matrix.append({
-                "Platform": platform,
-                "Price": price,
-                "Delivery": delivery,
-                "Category": category
-            })
-        
         return {
             "product_id": product_id,
-            "target_item": clean_title,
-            "category": category,
-            "comparisons": sorted(comparison_matrix, key=lambda x: x["Price"])
+            "category": "Cross-Platform Intelligence",
+            "comparisons": data
         }
-    except HTTPException as he:
-        raise he
     except Exception as e:
-        logger.error(f"Cross-platform aggregation error: {e}")
-        raise HTTPException(status_code=500, detail="Failed to compile comparison matrix.")
-
+        logger.error(f"Failed to query price comparisons: {e}")
+        raise HTTPException(status_code=500, detail="Database failure.")
 
 # ---------------------------------------------------------
-# ENDPOINT: Fetch 30-Day Simulated Price Trend
+# ENDPOINT: Database-Driven Price Trend
 # ---------------------------------------------------------
 @router.get("/trend/{product_id}")
-async def get_product_trend(product_id: int, current_title: str = "Product"):
+def get_product_trend(product_id: int):
     try:
-        clean_title = current_title.replace("Title:", "").strip().lower()
-        
-        base = 2500
-        if "macbook" in clean_title or "laptop" in clean_title: base = 75000
-        elif "asus" in clean_title or "display" in clean_title: base = 22000
-        elif any(w in clean_title for w in ["shoe", "shoes", "sneaker", "asics", "skechers", "nike"]): base = 4500
-        elif any(w in clean_title for w in ["shirt", "snitch", "wear", "apparel"]): base = 1200
-
-        trend_data = []
-        current_date = datetime.now()
-        running_price = base
-
-        for i in range(30, -1, -1):
-            date_str = (current_date - timedelta(days=i)).strftime("%Y-%m-%d")
-            running_price = int(running_price * (1 + random.uniform(-0.02, 0.025)))
-            trend_data.append({"date": date_str, "price": running_price})
-
-        return {"product_id": product_id, "trend": trend_data}
+        query = """
+            SELECT pl.platform, ph.price, ph.fetched_at::date as date
+            FROM price_history ph
+            JOIN product_links pl ON ph.link_id = pl.id
+            WHERE pl.product_id = :pid
+            ORDER BY ph.fetched_at ASC;
+        """
+        with db.engine.connect() as conn:
+            rows = conn.execute(text(query), {"pid": product_id}).fetchall()
+            data = [dict(row._mapping) for row in rows]
+            
+        return {"product_id": product_id, "trend": data}
     except Exception as e:
-        logger.error(f"Price trend generation error: {e}")
-        raise HTTPException(status_code=500, detail="Failed to compile historical trend matrix.")
-
+        logger.error(f"Failed to query price trends: {e}")
+        raise HTTPException(status_code=500, detail="Database failure.")
 
 # ---------------------------------------------------------
-# ENDPOINT: Competitor Sentiment Tracker
+# ENDPOINT: Simulated Metrics (Holdovers for UI Integrity)
 # ---------------------------------------------------------
 @router.get("/sentiment/{product_id}")
-async def get_product_sentiment(product_id: int):
-    try:
-        # Generates proportional distributions adding up to 100%
-        pos = random.randint(60, 85)
-        neu = random.randint(10, 20)
-        neg = 100 - (pos + neu)
-        
-        return {
-            "product_id": product_id,
-            "metrics": {"Positive": pos, "Neutral": neu, "Negative": neg},
-            "top_praises": ["Premium physical build quality", "Excellent value ratio", "Rapid delivery processing"],
-            "top_complaints": ["Slightly high baseline pricing", "Minor instructions documentation limits"]
-        }
-    except Exception as e:
-        logger.error(f"Sentiment generation matrix exception: {e}")
-        raise HTTPException(status_code=500, detail="Failed to analyze competitor review sentiment.")
+def get_product_sentiment(product_id: int):
+    pos = random.randint(60, 85)
+    neu = random.randint(10, 20)
+    return {
+        "metrics": {"Positive": pos, "Neutral": neu, "Negative": 100 - (pos + neu)},
+        "top_praises": ["Premium build quality", "Excellent value ratio"],
+        "top_complaints": ["Slightly high baseline pricing"]
+    }
 
-
-# ---------------------------------------------------------
-# ENDPOINT: Competitor Feature Benchmark
-# ---------------------------------------------------------
 @router.get("/benchmark/{product_id}")
-async def get_feature_benchmark(product_id: int):
-    try:
-        return {
-            "product_id": product_id,
-            "benchmarks": [
-                {"Feature": "Value for Money", "Product Score": random.randint(78, 95), "Market Average": 75},
-                {"Feature": "Material Quality", "Product Score": random.randint(80, 92), "Market Average": 72},
-                {"Feature": "Shipping Timelines", "Product Score": random.randint(85, 98), "Market Average": 80},
-                {"Feature": "Packaging Evaluation", "Product Score": random.randint(70, 88), "Market Average": 74}
-            ]
-        }
-    except Exception as e:
-        logger.error(f"Benchmark generation error: {e}")
-        raise HTTPException(status_code=500, detail="Failed to extract feature benchmarks.")
+def get_feature_benchmark(product_id: int):
+    return {
+        "benchmarks": [
+            {"Feature": "Value for Money", "Product Score": random.randint(78, 95), "Market Average": 75},
+            {"Feature": "Material Quality", "Product Score": random.randint(80, 92), "Market Average": 72}
+        ]
+    }
