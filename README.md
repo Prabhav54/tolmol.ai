@@ -60,6 +60,5 @@ The platform uses a closed-domain RAG framework to prevent AI hallucinations.
 ## 👨‍💻 Author
 ### Prabhav Khare
 
-##GitHub: @Prabhav54
-
-##LinkedIn: Prabhav Khare (www.linkedin.com/in/prabhav-khare)
+GitHub: @Prabhav54
+LinkedIn: Prabhav Khare (www.linkedin.com/in/prabhav-khare)
