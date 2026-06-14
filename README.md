@@ -21,7 +21,69 @@
 ---
 
 ## 🏗️ System Architecture
-
+tolmol.ai/
+│
+├── api/                              # FastAPI Application Layer
+│   ├── __init__.py
+│   ├── main.py                       # Server entry point, CORS, router registration
+│   ├── schemas.py                    # Pydantic request/response models
+│   ├── routes/
+│   │   ├── __init__.py
+│   │   ├── ingest.py                 # /ingest — scrape, hash, store, vectorize
+│   │   ├── query.py                  # /query — hybrid RAG, compare, trend, sentiment
+│   │   └── benchmark.py             # /benchmark — routing accuracy & latency evaluation
+│   └── services/
+│       └── database.py              # psycopg2 service layer with context manager
+│
+├── app/                              # Streamlit Presentation Layer
+│   ├── main.py                       # Dashboard UI, sidebar, chat, telemetry panels
+│   ├── utils.py                      # Text sanitize, SQL cleaner, vector formatter
+│   └── pages/
+│       ├── analytics.py              # Analytics sub-page (placeholder)
+│       ├── benchmark_dashboard.py    # Benchmark results visualizer (placeholder)
+│       └── query_ui.py               # Query UI sub-page (placeholder)
+│
+├── benchmark/                        # Evaluation & Testing
+│   ├── evaluator.py                  # Routing accuracy measurement logic
+│   ├── run_benchmark.py              # CLI runner for benchmark suite
+│   └── golden_set.json              # Ground-truth query → engine mappings
+│
+├── core/                             # Shared Configuration & Utilities
+│   ├── __init__.py
+│   ├── config.py                     # Pydantic Settings (DATABASE_URL, API keys)
+│   ├── exceptions.py                 # Custom exception hierarchy (RAGException, etc.)
+│   └── logger.py                     # Standardized logging with StreamHandler
+│
+├── db/                               # Database Layer
+│   ├── __init__.py
+│   ├── schema.sql                    # Full schema: products, product_links, price_history
+│   └── session.py                    # SQLAlchemy engine, pgvector init, global `db`
+│
+├── engines/                          # ML / AI Routing Layer
+│   ├── __init__.py
+│   ├── router.py                     # Regex-based intent router (VECTOR vs SQL)
+│   ├── vector_engine.py             # LangChain PGVector + Gemini Embeddings
+│   ├── sql_engine.py                # Keyword-driven SQL query builder & executor
+│   └── synthesis.py                 # LLaMA-3 via HuggingFace InferenceClient
+│
+├── notebook/
+│   └── gemini_rag_prototype.ipynb   # Jupyter prototype for RAG pipeline
+│
+├── scraper/
+│   ├── __init__.py
+│   ├── parser.py                     # httpx + BeautifulSoup + Gemini extraction
+│   └── text_processor.py            # Word-level chunker with overlap
+│
+├── streamlit/                        # (Reserved — empty, for future Streamlit pages)
+│
+├── .gitignore
+├── backend_requirements.txt          # Backend-only pip dependencies
+├── docker-compose.yml               # pgvector/pgvector:pg16 container on port 5433
+├── README.md
+├── requirements.txt                  # Full frontend + backend dependencies
+├── run.py                            # Windows-safe Uvicorn launcher
+├── setup.py                          # find_packages config for local imports
+└── test_run.py                       # Individual function sandbox
 ### 1. Ingestion Pipeline (Admin)
 The platform handles automated targeted ingestion for inventory building.
 1. Admin inputs a target product URL or data source.
