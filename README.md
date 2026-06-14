@@ -57,6 +57,10 @@ The platform uses a closed-domain RAG framework to prevent AI hallucinations.
 * API Keys for Hugging Face and your chosen LLM (Gemini).
 
 
+### 2. Create a virtual environment and install dependencies
+*python -m venv venv
+source venv/bin/activate  # On Windows use `venv\Scripts\activate`
+pip install -r requirements.txt
 
 
 
