@@ -58,13 +58,7 @@ The platform uses a closed-domain RAG framework to prevent AI hallucinations.
 
 
 ### 2. Create a virtual environment and install dependencies
-*python -m venv venv
-source venv/bin/activate  # On Windows use `venv\Scripts\activate`
-pip install -r requirements.txt
+* python -m venv venv
+* source venv/bin/activate  # On Windows use `venv\Scripts\activate`
+* pip install -r requirements.txt
 
-
-
-### 1. Clone the repository
-```bash
-git clone [https://github.com/Prabhav54/tolmol.ai.git](https://github.com/Prabhav54/tolmol.ai.git)
-cd tolmol.ai
