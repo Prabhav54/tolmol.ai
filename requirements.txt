@@ -1,16 +1,25 @@
-# UI Frontend
+# --- FRONTEND & DATA VISUALIZATION ---
 streamlit>=1.35.0
 pandas>=2.0.0
 plotly>=5.0.0
-requests>=2.31.0
 
-# API Backend
+# --- BACKEND & SERVER ---
 fastapi>=0.110.0
 uvicorn>=0.29.0
 gunicorn>=22.0.0
+requests>=2.31.0
+python-dotenv==1.0.0
 pydantic-settings
-supabase>=2.4.0
-sentence-transformers>=2.7.0
-google-generativeai>=0.4.0
-pgvector>=0.2.5
+
+# --- DATABASE & ORM ---
+sqlalchemy>=2.0.40
 psycopg2-binary>=2.9.9
+supabase>=2.4.0
+pgvector>=0.2.5
+
+# --- AI, ML & RAG ---
+langchain==1.3.1
+langchain-postgres
+google-generativeai>=0.4.0
+sentence-transformers>=2.7.0
+huggingface_hub>=0.19.0
