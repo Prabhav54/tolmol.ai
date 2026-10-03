@@ -1,3 +1,4 @@
+import time
 from functools import lru_cache
 from typing import List, Tuple
 
@@ -9,17 +10,27 @@ from engines.llm import gemini_client, hf_client
 logger = get_logger(__name__)
 
 
-def _embed_gemini(texts: List[str], task_type: str) -> List[List[float]]:
-    from google.genai import types
+def _embed_gemini(texts: List[str], task_type: str, retries: int) -> List[List[float]]:
+    from google.genai import errors, types
 
     vectors: List[List[float]] = []
     for start in range(0, len(texts), settings.EMBED_BATCH_SIZE):
         batch = texts[start:start + settings.EMBED_BATCH_SIZE]
-        result = gemini_client().models.embed_content(
-            model=settings.GEMINI_EMBEDDING_MODEL,
-            contents=batch,
-            config=types.EmbedContentConfig(task_type=task_type, output_dimensionality=settings.EMBEDDING_DIM),
-        )
+        for attempt in range(retries + 1):
+            try:
+                result = gemini_client().models.embed_content(
+                    model=settings.GEMINI_EMBEDDING_MODEL,
+                    contents=batch,
+                    config=types.EmbedContentConfig(task_type=task_type, output_dimensionality=settings.EMBEDDING_DIM),
+                )
+                break
+            except errors.ClientError as exc:
+                # The free tier counts every text in a batch against a per-minute quota.
+                if exc.code != 429 or attempt == retries:
+                    raise
+                wait = 20 * (attempt + 1)
+                logger.warning(f"Embedding quota hit; retrying in {wait}s ({attempt + 1}/{retries}).")
+                time.sleep(wait)
         vectors.extend(list(embedding.values) for embedding in result.embeddings)
     return vectors
 
@@ -37,14 +48,14 @@ def _embed_huggingface(texts: List[str]) -> List[List[float]]:
     return vectors
 
 
-def _embed(texts: List[str], task_type: str) -> List[List[float]]:
+def _embed(texts: List[str], task_type: str, retries: int = 0) -> List[List[float]]:
     if not texts:
         return []
     try:
         if settings.EMBEDDING_PROVIDER.lower() == "huggingface":
             vectors = _embed_huggingface(texts)
         else:
-            vectors = _embed_gemini(texts, task_type)
+            vectors = _embed_gemini(texts, task_type, retries)
     except LLMGenerationError as exc:
         raise EmbeddingError(str(exc)) from exc
     except Exception as exc:
@@ -58,8 +69,9 @@ def _embed(texts: List[str], task_type: str) -> List[List[float]]:
     return vectors
 
 
-def embed_documents(texts: List[str]) -> List[List[float]]:
-    return _embed(texts, "RETRIEVAL_DOCUMENT")
+def embed_documents(texts: List[str], retries: int = 3) -> List[List[float]]:
+    """Ingestion can wait out per-minute quotas; interactive queries (below) fail fast instead."""
+    return _embed(texts, "RETRIEVAL_DOCUMENT", retries)
 
 
 @lru_cache(maxsize=512)
