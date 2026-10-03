@@ -1,0 +1,150 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>tolmol.ai — catalog search that understands price</title>
+  <meta name="description" content="Search a product catalog in plain language. Price and rating limits run as exact SQL; descriptions are matched by meaning.">
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><path d='M4 6h14l10 10-12 12L4 16z' fill='%23F2B705'/><circle cx='10' cy='12' r='2.5' fill='%231B1F3B'/></svg>">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,500;12..96,700;12..96,800&family=IBM+Plex+Sans:wght@400;500;600&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="/styles.css">
+</head>
+<body>
+  <header class="topbar">
+    <a class="wordmark" href="#search" aria-label="tolmol.ai home">
+      <svg viewBox="0 0 32 32" aria-hidden="true"><path d="M4 6h14l10 10-12 12L4 16z"/><circle cx="10" cy="12" r="2.5"/></svg>
+      tolmol<span>.ai</span>
+    </a>
+    <nav class="tabs" aria-label="Sections">
+      <a href="#search" data-tab="search">Search</a>
+      <a href="#add" data-tab="add">Add products</a>
+      <a href="#insights" data-tab="insights">Insights</a>
+      <a href="#benchmark" data-tab="benchmark">Benchmark</a>
+    </nav>
+    <span class="health" id="health" title="Backend status">Connecting…</span>
+  </header>
+
+  <main>
+    <!-- SEARCH -->
+    <section id="view-search" class="view" aria-labelledby="search-title">
+      <h1 id="search-title" class="hero-title">Ask for it the way you'd ask a shopkeeper.</h1>
+      <p class="lede">Say what you want and what you'll pay. Hard limits like price, rating and platform are applied exactly; everything else is matched by meaning.</p>
+
+      <form id="search-form" class="searchbox" role="search">
+        <label for="q" class="sr-only">Search the catalog</label>
+        <input id="q" name="q" type="search" autocomplete="off" placeholder="running shoes under ₹2000 with rating above 4.2" required minlength="2">
+        <button type="submit" class="btn btn-primary">Search</button>
+      </form>
+      <div id="parse" class="parse" aria-live="polite"></div>
+
+      <div class="examples" id="examples" aria-label="Example searches">
+        <button type="button">breathable summer running wear</button>
+        <button type="button">phones between 10k and 20k</button>
+        <button type="button">top 5 rated skincare</button>
+        <button type="button">average price by category</button>
+        <button type="button">cheapest furniture in stock</button>
+      </div>
+
+      <div id="results" class="results" hidden>
+        <article class="answer">
+          <div class="answer-head">
+            <span id="route-pill" class="route-pill"></span>
+            <span id="route-reason" class="muted"></span>
+          </div>
+          <p id="answer-text" class="answer-text"></p>
+          <details class="trace">
+            <summary>How this was answered</summary>
+            <div id="timings" class="timings"></div>
+            <pre id="sql" class="sql" hidden></pre>
+          </details>
+        </article>
+        <div id="agg" class="agg" hidden>
+          <div class="chart-wrap"><canvas id="agg-chart" aria-label="Analytics result chart"></canvas></div>
+          <div id="agg-table" class="table-wrap"></div>
+        </div>
+        <div id="grid" class="grid"></div>
+      </div>
+      <p id="search-error" class="error" role="alert" hidden></p>
+    </section>
+
+    <!-- ADD PRODUCTS -->
+    <section id="view-add" class="view" aria-labelledby="add-title" hidden>
+      <h1 id="add-title" class="page-title">Add products</h1>
+      <p class="lede">Paste product page links from Amazon, Flipkart, Myntra, AJIO and others. Each link is fingerprinted with SHA-256 first, so a product that's already in the catalog is never written twice.</p>
+
+      <form id="add-form" class="stack">
+        <label for="urls">Product links, one per line (up to 25)</label>
+        <textarea id="urls" rows="5" placeholder="https://www.amazon.in/dp/B0CHX1W1XY&#10;https://www.flipkart.com/…/p/itm…" required></textarea>
+        <label class="check"><input type="checkbox" id="refresh"> Re-scrape links that are already in the catalog to update their price</label>
+        <div><button type="submit" class="btn btn-primary" id="add-btn">Add to catalog</button></div>
+      </form>
+      <p id="add-error" class="error" role="alert" hidden></p>
+      <div id="add-results" class="table-wrap"></div>
+
+      <h2 class="section-title">Recently added</h2>
+      <div id="recent" class="grid grid-compact"></div>
+    </section>
+
+    <!-- INSIGHTS -->
+    <section id="view-insights" class="view" aria-labelledby="insights-title" hidden>
+      <h1 id="insights-title" class="page-title">Catalog insights</h1>
+      <p class="lede">Live numbers straight from the database. Ask a reporting question in plain words and get the table, no SQL needed.</p>
+
+      <form id="ask-form" class="searchbox searchbox-small">
+        <label for="ask" class="sr-only">Ask a reporting question</label>
+        <input id="ask" type="search" placeholder="how many products under 1000 per platform" required minlength="2">
+        <button type="submit" class="btn btn-primary">Ask</button>
+      </form>
+      <div id="ask-result" class="ask-result" hidden>
+        <p id="ask-answer" class="answer-text"></p>
+        <div id="ask-table" class="table-wrap"></div>
+        <pre id="ask-sql" class="sql"></pre>
+      </div>
+
+      <dl id="kpis" class="kpis"></dl>
+      <div class="charts">
+        <figure><figcaption>Products and average price by platform</figcaption><div class="chart-wrap"><canvas id="chart-platform"></canvas></div></figure>
+        <figure><figcaption>How prices are spread</figcaption><div class="chart-wrap"><canvas id="chart-bands"></canvas></div></figure>
+        <figure class="wide"><figcaption>Largest categories</figcaption><div class="chart-wrap"><canvas id="chart-category"></canvas></div></figure>
+      </div>
+      <p id="insights-error" class="error" role="alert" hidden></p>
+    </section>
+
+    <!-- BENCHMARK -->
+    <section id="view-benchmark" class="view" aria-labelledby="bench-title" hidden>
+      <h1 id="bench-title" class="page-title">Benchmark</h1>
+      <p class="lede">Checks the router against a hand-labelled set of queries, then times top-k vector retrieval against the live catalog. The target is under 300 ms at the 95th percentile.</p>
+      <form id="bench-form" class="bench-controls">
+        <label>Timed queries <input id="samples" type="number" min="5" max="500" value="50"></label>
+        <button type="submit" class="btn btn-primary" id="bench-btn">Run benchmark</button>
+      </form>
+      <p id="bench-error" class="error" role="alert" hidden></p>
+      <div id="bench-results" hidden>
+        <div class="bench-cards">
+          <div class="bench-card">
+            <h2>Routing accuracy</h2>
+            <p class="big" id="acc"></p>
+            <p class="muted" id="acc-detail"></p>
+          </div>
+          <div class="bench-card">
+            <h2>Retrieval latency</h2>
+            <div id="latency"></div>
+          </div>
+        </div>
+        <div id="failures"></div>
+      </div>
+    </section>
+  </main>
+
+  <footer class="footer">
+    <span>tolmol.ai, built by Prabhav Khare</span>
+    <a href="/docs">API docs</a>
+    <a href="https://github.com/Prabhav54/tolmol.ai">Source</a>
+  </footer>
+
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js" defer></script>
+  <script src="/app.js" defer></script>
+</body>
+</html>

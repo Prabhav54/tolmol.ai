@@ -1,31 +1,28 @@
-from langchain_google_genai import GoogleGenerativeAIEmbeddings
-from langchain_postgres.vectorstores import PGVector
+from typing import Any, Dict, List, Optional
+
+from sqlalchemy import select, text
+
 from core.config import settings
-from core.logger import get_logger
+from db.models import CARD_COLUMNS, products, to_plain
+from db.session import get_engine
 
-logger = get_logger(__name__)
 
-class VectorEngine:
-    def __init__(self):
-        logger.info("Initializing LangChain PGVector Engine with Gemini Embeddings...")
-        
-        # 1. Initialize the Gemini Embedding Model
-        self.embeddings = GoogleGenerativeAIEmbeddings(
-            model="models/embedding-001",
-            google_api_key=settings.GOOGLE_API_KEY
-        )
+def semantic_search(
+    query_vector: List[float], top_k: int, min_similarity: Optional[float] = None
+) -> List[Dict[str, Any]]:
+    """Cosine-similarity ranking over the whole catalog, served by the HNSW index."""
+    threshold = settings.SEMANTIC_MIN_SIMILARITY if min_similarity is None else min_similarity
+    distance = products.c.embedding.cosine_distance(query_vector)
+    stmt = (
+        select(*CARD_COLUMNS, (1 - distance).label("similarity"))
+        .where(products.c.embedding.isnot(None))
+        .order_by(distance)
+        .limit(top_k)
+    )
 
-        # 2. Connect LangChain directly to your Supabase PostgreSQL
-        self.vector_store = PGVector(
-            embeddings=self.embeddings,
-            collection_name="ecommerce_products",
-            connection=settings.DATABASE_URL,
-            use_jsonb=True,
-        )
-    
-    def get_retriever(self):
-        # Return the top 4 most relevant product chunks
-        return self.vector_store.as_retriever(search_kwargs={"k": 4})
+    with get_engine().begin() as conn:
+        conn.execute(text(f"SET LOCAL hnsw.ef_search = {int(settings.HNSW_EF_SEARCH)}"))
+        rows = conn.execute(stmt).mappings().all()
 
-# Initialize a global instance to use across your API
-vector_db = VectorEngine()
+    hits = [to_plain(row) for row in rows]
+    return [hit for hit in hits if hit["similarity"] >= threshold]

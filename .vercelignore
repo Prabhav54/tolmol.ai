@@ -1,0 +1,10 @@
+.conda
+.venv
+.vscode
+.env
+.env.*
+notebook
+tests
+docker-compose.yml
+**/__pycache__
+*.log
