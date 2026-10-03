@@ -33,11 +33,20 @@ def hf_client():
     return InferenceClient(token=settings.HUGGINGFACE_API_TOKEN)
 
 
-def _config(**kwargs):
+def _thinking(model: str):
+    from google.genai import types
+
+    # Gemini 2.x turns thinking off with a zero budget; Gemini 3+ rejects that and takes a level instead.
+    if re.match(r"gemini-[12]\.", model):
+        return types.ThinkingConfig(thinking_budget=0)
+    return types.ThinkingConfig(thinking_level="low")
+
+
+def _config(model: str, **kwargs):
     from google.genai import types
 
     return types.GenerateContentConfig(
-        thinking_config=types.ThinkingConfig(thinking_budget=0),
+        thinking_config=_thinking(model),
         automatic_function_calling=types.AutomaticFunctionCallingConfig(disable=True),
         **kwargs,
     )
@@ -71,7 +80,7 @@ def generate_text(prompt: str, system: Optional[str] = None, max_tokens: int = 7
     response = _call(
         settings.GEMINI_CHAT_MODEL,
         prompt,
-        _config(system_instruction=system, max_output_tokens=max_tokens, temperature=temperature),
+        _config(settings.GEMINI_CHAT_MODEL, system_instruction=system, max_output_tokens=max_tokens, temperature=temperature),
     )
     if not response.text:
         raise ProviderError("Gemini returned an empty response.")
@@ -83,7 +92,7 @@ def generate_structured(prompt: str, schema: Type[T], contents: Any = None) -> T
     response = _call(
         settings.GEMINI_CHAT_MODEL,
         contents if contents is not None else prompt,
-        _config(response_mime_type="application/json", response_schema=schema, temperature=0),
+        _config(settings.GEMINI_CHAT_MODEL, response_mime_type="application/json", response_schema=schema, temperature=0),
     )
     if isinstance(response.parsed, schema):
         return response.parsed
@@ -112,7 +121,7 @@ def grounded_search(prompt: str, max_tokens: int = 4000) -> GroundedResult:
     response = _call(
         settings.GEMINI_SEARCH_MODEL,
         prompt,
-        _config(tools=[types.Tool(google_search=types.GoogleSearch())], temperature=0, max_output_tokens=max_tokens),
+        _config(settings.GEMINI_SEARCH_MODEL, tools=[types.Tool(google_search=types.GoogleSearch())], temperature=0, max_output_tokens=max_tokens),
     )
     sources = []
     candidate = (response.candidates or [None])[0]
