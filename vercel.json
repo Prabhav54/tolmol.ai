@@ -1,12 +1,9 @@
 {
   "$schema": "https://openapi.vercel.sh/vercel.json",
   "regions": ["bom1"],
-  "builds": [
-    {
-      "src": "api/index.py",
-      "use": "@vercel/python",
-      "config": { "maxLambdaSize": "100mb" }
-    }
-  ],
-  "routes": [{ "src": "/(.*)", "dest": "api/index.py" }]
+  "functions": {
+    "api/index.py": { "maxDuration": 60 }
+  },
+  "rewrites": [{ "source": "/api/(.*)", "destination": "/api/index" }],
+  "crons": [{ "path": "/api/cron/refresh", "schedule": "30 1 * * *" }]
 }

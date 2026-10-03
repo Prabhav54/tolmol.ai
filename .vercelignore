@@ -7,4 +7,5 @@ notebook
 tests
 docker-compose.yml
 **/__pycache__
+.pytest_cache
 *.log

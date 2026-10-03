@@ -1,0 +1,75 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>tolmol.ai — compare prices across Indian stores</title>
+  <meta name="description" content="Paste a product link, type a name or upload a photo. tolmol.ai compares the price across Indian stores, tracks its history and answers questions about specs and reviews.">
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><path d='M4 6h14l10 10-12 12L4 16z' fill='%23F2B705'/><circle cx='10' cy='12' r='2.5' fill='%231B1F3B'/></svg>">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,500;12..96,700;12..96,800&family=IBM+Plex+Sans:wght@400;500;600&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="/styles.css">
+</head>
+<body>
+  <header class="topbar">
+    <a class="wordmark" href="/" aria-label="tolmol.ai home">
+      <svg viewBox="0 0 32 32" aria-hidden="true"><path d="M4 6h14l10 10-12 12L4 16z"/><circle cx="10" cy="12" r="2.5"/></svg>
+      tolmol<span>.ai</span>
+    </a>
+    <span class="health" id="health" title="Backend status">Connecting…</span>
+  </header>
+
+  <main>
+    <!-- HOME: one box for links, names (English or Hinglish) and photos -->
+    <section id="view-home" aria-labelledby="home-title">
+      <h1 id="home-title" class="hero-title">Kitne ka hai, aur kahan sasta?</h1>
+      <p class="lede">Paste a product link, type what you're looking for, or upload a photo. We find the same product on other Indian stores, track the price every day and tell you whether to buy now or wait.</p>
+
+      <form id="search-form" class="searchbox" role="search">
+        <label for="q" class="sr-only">Product link or name</label>
+        <input id="q" type="text" autocomplete="off" required minlength="2" maxlength="2000"
+               placeholder="https://www.amazon.in/dp/…  or  joote 2000 ke andar">
+        <label class="photo-btn" title="Search by photo">
+          <span class="sr-only">Search by photo</span>
+          <input id="photo" type="file" accept="image/jpeg,image/png,image/webp" class="sr-only">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 8h3l2-3h6l2 3h3v11H4z"/><circle cx="12" cy="13" r="3.5"/></svg>
+        </label>
+        <button type="submit" class="btn btn-primary" id="go">Compare</button>
+      </form>
+
+      <div class="examples" id="examples" aria-label="Example searches">
+        <button type="button">iphone 15 128gb</button>
+        <button type="button">sony wh-1000xm5</button>
+        <button type="button">joote 2000 ke andar</button>
+        <button type="button">best mixer grinder under 4000</button>
+      </div>
+
+      <div id="status" class="status" role="status" hidden><span class="spinner" aria-hidden="true"></span><span id="status-text"></span></div>
+      <p id="error" class="error" role="alert" hidden></p>
+
+      <div id="candidates" hidden>
+        <h2 class="section-title">Which one did you mean?</h2>
+        <p id="interpretation" class="interpretation"></p>
+        <div id="candidate-grid" class="grid"></div>
+      </div>
+
+      <div id="recent" hidden>
+        <h2 class="section-title">Recently compared</h2>
+        <div id="recent-grid" class="grid"></div>
+      </div>
+    </section>
+
+    <!-- PRODUCT -->
+    <section id="view-product" hidden aria-live="polite"></section>
+  </main>
+
+  <footer class="footer">
+    <span>tolmol.ai · prices are checked daily and may change at the store</span>
+    <a href="/api/docs">API</a>
+  </footer>
+
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js" defer></script>
+  <script src="/app.js" defer></script>
+</body>
+</html>
